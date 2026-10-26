@@ -1,5 +1,7 @@
 # TELL practice kit
 
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/telltradingbot-lang/tell-practice/blob/main/TELL_quickstart.ipynb)
+
 **Find the tell.** Write a Python trading bot, run it in markets we generate, and compete on profit. No real money, ever.
 
 [日本語は下にあります](#日本語)
@@ -55,6 +57,15 @@ What `state` gives you (nothing from the future):
 | `state.limits[p]` | Your position limit |
 | `state.cash` | Your cash |
 
+## Watch your bot trade
+
+```bash
+python run.py my_bot.py --replay        # records practice-01 to replay.json
+python run.py my_bot.py --replay 7      # records practice-07
+```
+
+Drag `replay.json` onto the [TELL replay page](https://claude.ai/artifact/21cT7rsn9Ah4cEHDnzgcov) to watch every fill, your positions and your P&L play out tick by tick.
+
 ## Execution rules
 
 - `Order(p, qty)` with no price is a market order. It fills at the ask (buy) or bid (sell) and pays a 1 bps fee.
@@ -107,6 +118,15 @@ Python 3.10以上とnumpyが必要です。インストールなしで試すな�
 ### ボットの書き方
 
 `my_bot.py` を編集します。必要なのは、注文のリストを返す `on_tick(state)` だけです。`state` で見られる情報は英語版の表のとおりです（未来のデータは含まれません）。`flow_buy` / `flow_sell` は、NPCが成行で売買した数量の履歴（歩み値）です。
+
+### ボットの動きを見る
+
+```bash
+python run.py my_bot.py --replay        # practice-01 を replay.json に記録
+python run.py my_bot.py --replay 7      # practice-07 を記録
+```
+
+できた `replay.json` を [TELLリプレイページ](https://claude.ai/artifact/21cT7rsn9Ah4cEHDnzgcov) にドラッグすると、約定・保有量・損益の動きをtickごとにアニメーションで見られます。
 
 ### 約定ルール
 

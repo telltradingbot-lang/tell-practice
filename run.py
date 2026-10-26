@@ -4,10 +4,14 @@ Score your bot on the practice scenarios.
   python run.py my_bot.py            # all 50 practice scenarios
   python run.py my_bot.py --n 10     # first 10 only (faster while iterating)
   python run.py examples/random_bot.py
+  python run.py my_bot.py --replay           # also save replay.json for practice-01
+  python run.py my_bot.py --replay 7         # save the replay for practice-07
+
+Drag replay.json onto the TELL replay page to watch your bot trade.
 """
-import argparse, importlib.util, inspect, sys, time
+import argparse, importlib.util, inspect, json, sys, time
 import numpy as np
-from tell import load_practice, run, PRODUCTS
+from tell import load_practice, run, make_replay, PRODUCTS
 
 
 def load_bot_class(path):
@@ -27,6 +31,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("bot")
     ap.add_argument("--n", type=int, default=None, help="number of practice scenarios to run")
+    ap.add_argument("--replay", nargs="?", const=1, type=int, default=None,
+                    help="save replay.json for practice scenario N (default 1)")
     a = ap.parse_args()
 
     Bot = load_bot_class(a.bot)
@@ -49,6 +55,16 @@ def main():
     print(f"Win rate       {(x > 0).mean():.0%}")
     print("By product     " + "  ".join(f"{p} {np.mean(by_prod[p]):.0f}" for p in PRODUCTS))
     print(f"Time           {time.time() - t0:.1f}s")
+
+    if a.replay is not None:
+        all_sc = load_practice()
+        if not 1 <= a.replay <= len(all_sc):
+            sys.exit(f"--replay must be between 1 and {len(all_sc)}")
+        sc = all_sc[a.replay - 1]
+        r = run(Bot(), sc, record=True)
+        with open("replay.json", "w") as f:
+            json.dump(make_replay(Bot.__name__, sc, r), f, separators=(",", ":"))
+        print(f"\nSaved replay.json ({sc.name}). Drag it onto the TELL replay page.")
 
 
 if __name__ == "__main__":

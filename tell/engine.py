@@ -82,8 +82,12 @@ def _clamp(pos, qty, limit):
     return min(0, max(qty, -limit - pos))
 
 
-def run(bot, sc: Scenario):
+def run(bot, sc: Scenario, record=False):
+    """Run one scenario. With record=True, also returns every fill and the
+    position after each tick (used to make replay files)."""
     fee = TAKER_FEE_BPS / 1e4
+    fills = []
+    pos_hist = {p: [] for p in PRODUCTS} if record else None
     n = sc.n_ticks
     pos = {p: 0 for p in PRODUCTS}
     cash = 0.0
@@ -109,11 +113,13 @@ def run(bot, sc: Scenario):
                 if q:
                     c = q * a * (1 + fee)
                     cash -= c; cash_by_product[p] -= c; pos[p] += q; n_trades += 1
+                    if record: fills.append((t, p, q, float(a), "m"))
             elif o.qty < 0 and (o.price is None or o.price <= b):
                 q = _clamp(pos[p], o.qty, lim)
                 if q:
                     c = -q * b * (1 - fee)
                     cash += c; cash_by_product[p] += c; pos[p] += q; n_trades += 1
+                    if record: fills.append((t, p, q, float(b), "m"))
             elif o.qty > 0:
                 resting[p]["buy"].append([o.price, o.qty])
             else:
@@ -132,6 +138,7 @@ def run(bot, sc: Scenario):
                 if fill:
                     cash += fill * price; cash_by_product[p] += fill * price
                     pos[p] -= fill; demand -= fill; n_trades += 1
+                    if record: fills.append((t, p, -fill, float(price), "l"))
             supply = int(sc.npc_sell_qty[p][t])
             for price, q in sorted(buys, key=lambda x: -x[0]):
                 if supply <= 0:
@@ -140,12 +147,38 @@ def run(bot, sc: Scenario):
                 if fill:
                     cash -= fill * price; cash_by_product[p] -= fill * price
                     pos[p] += fill; supply -= fill; n_trades += 1
+                    if record: fills.append((t, p, fill, float(price), "l"))
 
         equity[t] = cash + sum(pos[p] * sc.mid[p][t] for p in PRODUCTS)
+        if record:
+            for p in PRODUCTS:
+                pos_hist[p].append(pos[p])
 
     pnl_by_product = {p: cash_by_product[p] + pos[p] * sc.mid[p][-1] for p in PRODUCTS}
-    return {"pnl": float(equity[-1]), "equity": equity,
-            "pnl_by_product": pnl_by_product, "n_trades": n_trades}
+    out = {"pnl": float(equity[-1]), "equity": equity,
+           "pnl_by_product": pnl_by_product, "n_trades": n_trades}
+    if record:
+        out["fills"] = fills
+        out["positions"] = pos_hist
+    return out
+
+
+def make_replay(bot_name, sc: Scenario, result):
+    """Pack a recorded run into a small JSON-ready dict for the TELL replay page."""
+    return {
+        "format": "tell-replay-1",
+        "bot": bot_name,
+        "scenario": sc.name,
+        "ticks": sc.n_ticks,
+        "products": PRODUCTS,
+        "limits": POSITION_LIMITS,
+        "mid": {p: [round(float(v), 3) for v in sc.mid[p]] for p in PRODUCTS},
+        "equity": [round(float(v), 1) for v in result["equity"]],
+        "positions": result["positions"],
+        "fills": [[t, p, q, round(px, 3), k] for t, p, q, px, k in result["fills"]],
+        "pnl": round(result["pnl"], 1),
+        "pnl_by_product": {p: round(v, 1) for p, v in result["pnl_by_product"].items()},
+    }
 
 
 def load_practice(path=None):
