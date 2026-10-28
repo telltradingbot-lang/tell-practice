@@ -2,7 +2,11 @@
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/telltradingbot-lang/tell-practice/blob/main/TELL_quickstart.ipynb)
 
-**Find the tell.** Write a Python trading bot, run it in markets we generate, and compete on profit. No real money, ever.
+**Find the tell.** TELL is a free Python trading-bot competition where developers write bots and compete in a fictional market.
+
+TELL is currently in pre-registration, with a working public practice environment already available.
+
+[Site](https://telltradingbot-lang.github.io/tell-practice/) · [Practice market (runs in your browser)](https://telltradingbot-lang.github.io/tell-practice/web/) · [Pre-register](https://docs.google.com/forms/d/e/1FAIpQLScodTToTpoWhyD7kxLS6b8hWy7AxgMGxw-bn-_qvMKvQmtWyg/viewform) · [Rules](https://telltradingbot-lang.github.io/tell-practice/rules.html)
 
 [日本語は下にあります](#日本語)
 

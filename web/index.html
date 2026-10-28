@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>TELL — Find the tell.</title>
-<meta name="description" content="A trading bot game. Write a Python bot and watch it trade in your browser. Free, no real money, $20 prize at 40 players.">
+<meta name="description" content="TELL is a free Python trading-bot competition where developers write bots and compete in a fictional market. Run your bot in the browser.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TELL">
 <meta property="og:title" content="TELL — Find the tell.">
-<meta property="og:description" content="A trading bot game. Write a Python bot and watch it trade in your browser. Free, no real money, $20 prize at 40 players.">
+<meta property="og:description" content="TELL is a free Python trading-bot competition where developers write bots and compete in a fictional market. Run your bot in the browser.">
 <meta property="og:url" content="https://telltradingbot-lang.github.io/tell-practice/web/">
 <meta property="og:image" content="https://telltradingbot-lang.github.io/tell-practice/web/og.png">
 <meta property="og:image:width" content="1200">
@@ -51,6 +51,10 @@ a{color:var(--led);text-underline-offset:3px}
 .brand{display:flex;align-items:baseline;gap:14px}
 .wordmark{font-family:var(--dot);font-size:28px;letter-spacing:.14em;color:var(--led);line-height:1;text-decoration:none}
 .brand span{color:var(--muted);font-size:14px}
+.right{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:flex-end}
+.hnav{display:flex;gap:14px;font-size:14px}.hnav a{color:var(--muted);text-decoration:none}.hnav a:hover{color:var(--text)}
+.prereg{padding:7px 16px!important;font-size:14px!important;text-decoration:none}
+@media (max-width:640px){.hnav{display:none}.right{gap:8px}}
 .lang{display:flex;gap:4px}
 .lang button{background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 13px;cursor:pointer;font-size:13px}
 .lang button[aria-pressed="true"]{color:var(--black);background:var(--led);border-color:var(--led)}
@@ -152,10 +156,14 @@ footer .wrap{padding-block:22px}
 </style>
 
 <div class="wrap top">
-  <div class="brand"><a class="wordmark" href="https://claude.ai/artifact/HZVih5rT7mKGu6Xzq93pbb" target="_blank" rel="noopener">TELL</a><span data-i18n="sub">リプレイ</span></div>
+  <div class="brand"><a class="wordmark" href="../">TELL</a><span data-i18n="sub">練習マーケット</span></div>
+  <div class="right">
+  <nav class="hnav" aria-label="Site"><a href="../" data-i18n="navHome">ホーム</a><a href="../rules.html" data-i18n="navRules">ルール</a></nav>
+  <a class="btn primary prereg" href="https://docs.google.com/forms/d/e/1FAIpQLScodTToTpoWhyD7kxLS6b8hWy7AxgMGxw-bn-_qvMKvQmtWyg/viewform" target="_blank" rel="noopener" data-i18n="navReg">事前登録</a>
   <div class="lang" role="group" aria-label="Language">
     <button id="lang-ja" type="button" aria-pressed="true">日本語</button>
     <button id="lang-en" type="button" aria-pressed="false">EN</button>
+  </div>
   </div>
 </div>
 
@@ -225,7 +233,7 @@ footer .wrap{padding-block:22px}
 <script type="application/json" id="pysrc">{"engine": "\"\"\"\nTELL match engine (public)\n\nEvery tick, your bot's on_tick(state) is called and returns a list of orders.\n\n  Order(product, qty, price=None)\n    qty   : positive = buy, negative = sell\n    price : None = market order. A buy at price >= ask (or a sell at price <= bid)\n            also executes immediately as a market order.\n            Any other price is a limit order that rests for that tick only and\n            fills if an NPC trader arrives.\n\nExecution rules\n  - Market orders fill at the ask (buy) / bid (sell) and pay a 1 bps taker fee\n  - Limit orders only fill when priced strictly inside the market bid/ask.\n    Each tick, NPC buyers/sellers arrive with some quantity and fill the best-priced\n    limit orders first. No fee on limit fills.\n  - Anything beyond your position limit is cut automatically\nScoring: profit and loss, with open positions marked at the final mid price\n\"\"\"\nfrom dataclasses import dataclass, field\nimport os\nimport numpy as np\n\nPRODUCTS = [\"BRCK\", \"GOLDN\", \"STEL\", \"TOWR\"]\nPOSITION_LIMITS = {\"BRCK\": 50, \"GOLDN\": 20, \"STEL\": 30, \"TOWR\": 30}\nTAKER_FEE_BPS = 1.0\nBRCK_HALF_SPREAD = 2.0\nOTHER_HALF_SPREAD_BPS = 5.0\n\n\n@dataclass\nclass Order:\n    product: str\n    qty: int\n    price: float | None = None\n\n\n@dataclass\nclass Scenario:\n    name: str\n    mid: dict\n    npc_buy_qty: dict\n    npc_sell_qty: dict\n    bid: dict = field(default_factory=dict)\n    ask: dict = field(default_factory=dict)\n\n    def __post_init__(self):\n        for p in PRODUCTS:\n            m = self.mid[p]\n            if p == \"BRCK\":\n                self.bid[p], self.ask[p] = m - BRCK_HALF_SPREAD, m + BRCK_HALF_SPREAD\n            else:\n                hs = OTHER_HALF_SPREAD_BPS / 1e4\n                self.bid[p], self.ask[p] = m * (1 - hs), m * (1 + hs)\n\n    @property\n    def n_ticks(self):\n        return len(self.mid[PRODUCTS[0]])\n\n\nclass State:\n    \"\"\"What your bot can see at tick t. It never contains future data.\"\"\"\n    def __init__(self, sc: Scenario, t: int, position: dict, cash: float):\n        self.t = t\n        self.n_ticks = sc.n_ticks\n        self.products = PRODUCTS\n        self.limits = dict(POSITION_LIMITS)\n        self.position = dict(position)\n        self.cash = cash\n        self.mid = {p: sc.mid[p][:t + 1] for p in PRODUCTS}\n        # Trade tape: market-order quantities NPCs bought/sold up to the previous tick\n        self.flow_buy = {p: sc.npc_buy_qty[p][:t] for p in PRODUCTS}\n        self.flow_sell = {p: sc.npc_sell_qty[p][:t] for p in PRODUCTS}\n        self.bid = {p: float(sc.bid[p][t]) for p in PRODUCTS}\n        self.ask = {p: float(sc.ask[p][t]) for p in PRODUCTS}\n\n\ndef _clamp(pos, qty, limit):\n    if qty > 0:\n        return max(0, min(qty, limit - pos))\n    return min(0, max(qty, -limit - pos))\n\n\ndef run(bot, sc: Scenario, record=False):\n    \"\"\"Run one scenario. With record=True, also returns every fill and the\n    position after each tick (used to make replay files).\"\"\"\n    fee = TAKER_FEE_BPS / 1e4\n    fills = []\n    pos_hist = {p: [] for p in PRODUCTS} if record else None\n    n = sc.n_ticks\n    pos = {p: 0 for p in PRODUCTS}\n    cash = 0.0\n    equity = np.empty(n)\n    cash_by_product = {p: 0.0 for p in PRODUCTS}\n    n_trades = 0\n\n    if hasattr(bot, \"reset\"):\n        bot.reset()\n\n    for t in range(n):\n        orders = bot.on_tick(State(sc, t, pos, cash)) or []\n        resting = {p: {\"buy\": [], \"sell\": []} for p in PRODUCTS}\n\n        for o in orders:\n            p = o.product\n            if p not in pos or o.qty == 0:\n                continue\n            b, a = sc.bid[p][t], sc.ask[p][t]\n            lim = POSITION_LIMITS[p]\n            if o.qty > 0 and (o.price is None or o.price >= a):\n                q = _clamp(pos[p], o.qty, lim)\n                if q:\n                    c = q * a * (1 + fee)\n                    cash -= c; cash_by_product[p] -= c; pos[p] += q; n_trades += 1\n                    if record: fills.append((t, p, q, float(a), \"m\"))\n            elif o.qty < 0 and (o.price is None or o.price <= b):\n                q = _clamp(pos[p], o.qty, lim)\n                if q:\n                    c = -q * b * (1 - fee)\n                    cash += c; cash_by_product[p] += c; pos[p] += q; n_trades += 1\n                    if record: fills.append((t, p, q, float(b), \"m\"))\n            elif o.qty > 0:\n                resting[p][\"buy\"].append([o.price, o.qty])\n            else:\n                resting[p][\"sell\"].append([o.price, -o.qty])\n\n        for p in PRODUCTS:\n            lim = POSITION_LIMITS[p]\n            demand = int(sc.npc_buy_qty[p][t])\n            a, b = sc.ask[p][t], sc.bid[p][t]\n            sells = [x for x in resting[p][\"sell\"] if x[0] < a]\n            buys = [x for x in resting[p][\"buy\"] if x[0] > b]\n            for price, q in sorted(sells, key=lambda x: x[0]):\n                if demand <= 0:\n                    break\n                fill = -_clamp(pos[p], -min(q, demand), lim)\n                if fill:\n                    cash += fill * price; cash_by_product[p] += fill * price\n                    pos[p] -= fill; demand -= fill; n_trades += 1\n                    if record: fills.append((t, p, -fill, float(price), \"l\"))\n            supply = int(sc.npc_sell_qty[p][t])\n            for price, q in sorted(buys, key=lambda x: -x[0]):\n                if supply <= 0:\n                    break\n                fill = _clamp(pos[p], min(q, supply), lim)\n                if fill:\n                    cash -= fill * price; cash_by_product[p] -= fill * price\n                    pos[p] += fill; supply -= fill; n_trades += 1\n                    if record: fills.append((t, p, fill, float(price), \"l\"))\n\n        equity[t] = cash + sum(pos[p] * sc.mid[p][t] for p in PRODUCTS)\n        if record:\n            for p in PRODUCTS:\n                pos_hist[p].append(pos[p])\n\n    pnl_by_product = {p: cash_by_product[p] + pos[p] * sc.mid[p][-1] for p in PRODUCTS}\n    out = {\"pnl\": float(equity[-1]), \"equity\": equity,\n           \"pnl_by_product\": pnl_by_product, \"n_trades\": n_trades}\n    if record:\n        out[\"fills\"] = fills\n        out[\"positions\"] = pos_hist\n    return out\n\n\ndef make_replay(bot_name, sc: Scenario, result):\n    \"\"\"Pack a recorded run into a small JSON-ready dict for the TELL replay page.\"\"\"\n    return {\n        \"format\": \"tell-replay-1\",\n        \"bot\": bot_name,\n        \"scenario\": sc.name,\n        \"ticks\": sc.n_ticks,\n        \"products\": PRODUCTS,\n        \"limits\": POSITION_LIMITS,\n        \"mid\": {p: [round(float(v), 3) for v in sc.mid[p]] for p in PRODUCTS},\n        \"equity\": [round(float(v), 1) for v in result[\"equity\"]],\n        \"positions\": result[\"positions\"],\n        \"fills\": [[t, p, q, round(px, 3), k] for t, p, q, px, k in result[\"fills\"]],\n        \"pnl\": round(result[\"pnl\"], 1),\n        \"pnl_by_product\": {p: round(v, 1) for p, v in result[\"pnl_by_product\"].items()},\n    }\n\n\ndef load_practice(path=None):\n    \"\"\"Load the public practice scenarios as a list of Scenario objects.\"\"\"\n    path = path or os.path.join(os.path.dirname(__file__), \"..\", \"data\", \"practice.npz\")\n    d = np.load(path)\n    names = list(d[\"names\"])\n    out = []\n    for i, name in enumerate(names):\n        out.append(Scenario(\n            name=str(name),\n            mid={p: d[f\"mid_{p}\"][i].astype(np.float64) for p in PRODUCTS},\n            npc_buy_qty={p: d[f\"buy_{p}\"][i].astype(np.int64) for p in PRODUCTS},\n            npc_sell_qty={p: d[f\"sell_{p}\"][i].astype(np.int64) for p in PRODUCTS},\n        ))\n    return out\n", "init": "from .engine import Order, State, Scenario, run, load_practice, make_replay, PRODUCTS\n\n__all__ = [\"Order\", \"State\", \"Scenario\", \"run\", \"load_practice\", \"make_replay\", \"PRODUCTS\"]\n"}</script>
 <script>
 const T={
-  ja:{sub:"リプレイ",pnlK:"損益",eqH:"損益の推移",tapeH:"約定",dropH:"自分のボットを走らせる",upTop:"ボットをアップロード",upHint:"my_bot.py を選ぶと、ブラウザの中で実行して再生します",dropAll:"ここにドロップ",
+  ja:{sub:"練習マーケット",navHome:"ホーム",navRules:"ルール",navReg:"事前登録",pnlK:"損益",eqH:"損益の推移",tapeH:"約定",dropH:"自分のボットを走らせる",upTop:"ボットをアップロード",upHint:"my_bot.py を選ぶと、ブラウザの中で実行して再生します",dropAll:"ここにドロップ",
     dropP:"my_bot.py をここにドロップするか、ファイルを選んでください。ブラウザの中で練習シナリオを実行して、そのまま再生します。コードはどこにも送信されません。",pick:"ファイルを選ぶ",
     scL:"シナリオ",scoreH:"練習シナリオ50本で採点",scoreHint:"ボットを読み込むと、50本すべてでの成績を出せます。",scoreBtn:"50本で採点する",
     small1:"初回だけ、Pythonの起動に10〜20秒ほどかかります。",small2:"run.py --replay で作った replay.json も、ドロップすれば再生できます。",
@@ -242,7 +250,7 @@ const T={
     errFormat:"TELLのリプレイファイルではないようです。run.py に --replay を付けて作ったファイルを選んでください。",
     errRead:"ファイルを読み込めませんでした。壊れていないか確認して、もう一度選んでください。",
     play:"再生",pause:"一時停止"},
-  en:{sub:"Replay",pnlK:"P&L",eqH:"P&L over time",tapeH:"Fills",dropH:"Run your own bot",upTop:"Upload your bot",upHint:"Choose my_bot.py and it runs in your browser, then plays",dropAll:"Drop it here",
+  en:{sub:"Practice market",navHome:"Home",navRules:"Rules",navReg:"Pre-register",pnlK:"P&L",eqH:"P&L over time",tapeH:"Fills",dropH:"Run your own bot",upTop:"Upload your bot",upHint:"Choose my_bot.py and it runs in your browser, then plays",dropAll:"Drop it here",
     dropP:"Drop my_bot.py here, or choose the file. It runs on a practice scenario inside your browser and plays straight away. Your code is never sent anywhere.",pick:"Choose file",
     scL:"Scenario",scoreH:"Score on all 50 practice scenarios",scoreHint:"Load a bot to see its results across all 50 scenarios.",scoreBtn:"Score on 50 scenarios",
     small1:"The first run takes 10 to 20 seconds while Python starts.",small2:"You can also drop a replay.json made with run.py --replay.",
@@ -260,13 +268,13 @@ const T={
     errRead:"The file couldn't be read. Check that it isn't damaged and choose it again.",
     play:"Play",pause:"Pause"}
 };
-const SPEEDS=[1,4,16];
+const SPEEDS=[1,2];
 const BASE_TPS=25;               // 1x = 25 ticks per second
 let lang="ja";
 try{const s=localStorage.getItem("tell-lang");if(s==="en"||s==="ja")lang=s;}catch(e){}
 
 const DEMOS=JSON.parse(document.getElementById("demoData").textContent);
-let R=null, demoIdx=0, cur=0, playing=false, speed=4, acc=0, lastT=0, raf=null, lastTapeKey="";
+let R=null, demoIdx=0, cur=0, playing=false, speed=1, acc=0, lastT=0, raf=null, lastTapeKey="";
 let fillsBy={}, fillsAll=[], yr={}, eqr=[0,0];
 const reduceMotion=matchMedia("(prefers-reduced-motion: reduce)").matches;
 const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
